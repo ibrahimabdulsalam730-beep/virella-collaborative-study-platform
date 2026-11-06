@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  INSTRUCTOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+enum ReportType {
+  USER
+  ROOM
+  MESSAGE
+  CONTENT
+}
+
+model User {
+  id                 String     @id @default(cuid())
+  name               String?
+  email              String     @unique
+  emailVerified      DateTime?
+  passwordHash       String?
+  image              String?
+  role               Role       @default(STUDENT)
+  status             UserStatus @default(ACTIVE)
+  onboardingComplete Boolean    @default(false)
+  studyGoals         String[]   @default([])
+  subjects           String[]   @default([])
+  lastActiveAt       DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  accounts           Account[]
+  sessions           Session[]
+  auditLogs          AuditLog[]
+  adminTwoFactor     AdminTwoFactor?
+  reportsSubmitted   Report[]   @relation("ReportSubmitter")
+  reportsTargeted    Report[]   @relation("ReportTarget")
+
+  @@map("users")
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+  @@map("verification_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@map("password_reset_tokens")
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  userId         String?
+  action         String
+  targetUserId   String?
+  ipAddress      String?
+  userAgent      String?
+  metadata       String?  @db.Text
+  createdAt      DateTime @default(now())
+
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Report {
+  id           String       @id @default(cuid())
+  type         ReportType
+  status       ReportStatus @default(PENDING)
+  reason       String
+  details      String?      @db.Text
+  submitterId  String?
+  targetUserId String?
+  targetId     String?
+  assigneeId   String?
+  notes        String?      @db.Text
+  resolvedAt   DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  submitter    User?        @relation("ReportSubmitter", fields: [submitterId], references: [id], onDelete: SetNull)
+  targetUser   User?        @relation("ReportTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@map("reports")
+}
+
+model Announcement {
+  id          String   @id @default(cuid())
+  title       String
+  body        String   @db.Text
+  targetRoles String[] @default([])
+  isActive    Boolean  @default(true)
+  sentEmail   Boolean  @default(false)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([createdAt])
+  @@map("announcements")
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+model AdminTwoFactor {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  secret        String
+  backupCodes   String[]  @default([])
+  enabled       Boolean   @default(false)
+  verifiedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admin_two_factor")
+}

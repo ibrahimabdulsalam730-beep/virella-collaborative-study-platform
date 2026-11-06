@@ -1,0 +1,68 @@
+version: "3.8"
+
+services:
+  # Next.js Frontend & API
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://virella:virella_secret@postgres:5432/virella_db?schema=public
+      - REDIS_URL=redis://redis:6379
+      - NEXT_PUBLIC_SOCKET_URL=http://localhost:4001
+    depends_on:
+      - postgres
+      - redis
+
+  # Socket.IO Realtime Room Server
+  socket:
+    build:
+      context: .
+      dockerfile: Dockerfile.socket
+    ports:
+      - "4001:4001"
+    environment:
+      - SOCKET_PORT=4001
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+
+  # PostgreSQL Database (Prisma ORM)
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=virella
+      - POSTGRES_PASSWORD=virella_secret
+      - POSTGRES_DB=virella_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # Redis Cache for Realtime Presence and Room State
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  # Python FastAPI Proctoring Service (Optional fallback for low-end devices)
+  proctoring-service:
+    build:
+      context: ./services/proctoring
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - MEDIAPIPE_CONFIDENCE=0.65
+
+volumes:
+  pgdata:
+  redisdata:
